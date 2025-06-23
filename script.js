@@ -619,6 +619,8 @@ proxy-providers:
     type: http
     url: "${url}"
     path: ./proxy_providers/sub.yml
+    override:
+      udp: true
     health-check:
       enable: true
       url: http://cp.cloudflare.com/generate_204
@@ -1111,6 +1113,7 @@ function generateVmessConfig(proxy) {
   server: '${proxy.server}'
   port: ${proxy.port}
   uuid: '${proxy.uuid}'
+  udp: true
   alterId: ${proxy.alterId || 0}
   cipher: '${proxy.cipher || "auto"}'`;
 
@@ -1192,7 +1195,8 @@ function generateShadowsocksConfig(proxy) {
   server: '${proxy.server}'
   port: ${proxy.port}
   cipher: '${proxy.cipher}'
-  password: '${proxy.password}'`;
+  password: '${proxy.password}'
+  udp: true`;
 
   if (proxy.plugin) {
     config += `
@@ -1242,7 +1246,8 @@ function generateTrojanConfig(proxy) {
   type: ${proxy.type}
   server: '${proxy.server}'
   port: ${proxy.port}
-  password: '${proxy.password}'`;
+  password: '${proxy.password}'
+  udp: true`;
 
   if (proxy.tls !== false) {
     config += `
@@ -1333,7 +1338,8 @@ function generateVlessConfig(proxy) {
   type: ${proxy.type}
   server: '${proxy.server}'
   port: ${proxy.port}
-  uuid: '${proxy.uuid}'`;
+  uuid: '${proxy.uuid}'
+  udp: true`;
 
   if (proxy.tls) {
     config += `
