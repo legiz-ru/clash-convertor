@@ -8,7 +8,9 @@ const warpToggle = document.getElementById('warp');
 const warpModal = document.getElementById('warpModal');
 const closeModal = document.querySelector('.close');
 const rulesToggle = document.getElementById('rules');
-const rulesContent = `rule-providers:
+const rulesOptions = document.getElementById('rulesOptions');
+const rulePresets = {
+    'ru-bundle': `rule-providers:
   skrepysh-proxy:
     type: http
     url: https://github.com/Skrepysh/mihomo-rulesets/raw/refs/heads/main/skrepysh-rulesets/skrepysh-proxy.yaml
@@ -43,27 +45,129 @@ rules:
   - RULE-SET,torrent-trackers,DIRECT
   - RULE-SET,skrepysh-proxy,PROXY
   - RULE-SET,ru-bundle,PROXY
-  - MATCH,DIRECT`;
+  - MATCH,DIRECT`,
+    'xkeen-mihomo': `rule-providers:
+  refilter-domains:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://github.com/legiz-ru/mihomo-rule-sets/raw/main/re-filter/domain-rule.mrs
+    path: ./rule-providers/refilter-domains.mrs
+
+  cloudflare-ips:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/cloudflare.mrs
+    path: ./rule-providers/cloudflare-ips.mrs
+    interval: 86400
+
+  discord:
+    type: inline
+    behavior: classical
+    format: text
+    payload:
+      - AND,((DOMAIN-KEYWORD,discord),(NOT,((DOMAIN-SUFFIX,ru))))
+      - AND,((RULE-SET,cloudflare-ips,no-resolve),(NETWORK,TCP),(OR,((DST-PORT,2000-2300),(DST-PORT,8443))))
+      - AND,((RULE-SET,cloudflare-ips,no-resolve),(NETWORK,UDP),(OR,((DST-PORT,19200-19400),(DST-PORT,50000-51000))))
+      - AND,((IP-CIDR,5.200.14.128/25,no-resolve),(NETWORK,UDP),(DST-PORT,50000-51000))
+      - AND,((IP-CIDR,34.0.0.0/15,no-resolve),(NETWORK,UDP),(DST-PORT,50000-51000))
+      - AND,((IP-CIDR,34.2.0.0/15,no-resolve),(NETWORK,UDP),(DST-PORT,50000-51000))
+      - AND,((IP-CIDR,35.192.0.0/11,no-resolve),(NETWORK,UDP),(DST-PORT,50000-51000))
+      - AND,((IP-CIDR,66.22.192.0/18,no-resolve),(NETWORK,UDP),(DST-PORT,50000-51000))
+      - AND,((IP-CIDR,138.128.136.0/21,no-resolve),(NETWORK,UDP),(DST-PORT,50000-51000))
+
+  telegram-ips:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/telegram.mrs
+    path: ./rule-providers/telegram-ips.mrs
+    interval: 86400
+
+  meta-ips:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://github.com/zxc-rv/assets/raw/refs/heads/main/rules/meta-ips.mrs
+    path: ./rule-providers/meta-ips.mrs
+    interval: 86400
+
+rules:
+  - AND,((DST-PORT,443),(NETWORK,UDP)),QUIC
+  - OR,((DOMAIN-SUFFIX,gql.twitch.tv),(DOMAIN-SUFFIX,usher.ttvnw.net)),Заблок. сервисы
+  - GEOSITE,category-ai-!cn,AI
+  - GEOSITE,steam,Steam
+  - GEOSITE,spotify,Spotify
+  - GEOSITE,reddit,Reddit
+  - OR,((GEOSITE,youtube),(DOMAIN-SUFFIX,googleusercontent.com)),YouTube
+  - GEOSITE,twitch,Twitch
+  - GEOSITE,twitter,Twitter
+  - RULE-SET,discord,Discord
+  - OR,((GEOSITE,meta),(RULE-SET,meta-ips,no-resolve)),Meta
+  - OR,((GEOSITE,telegram),(RULE-SET,telegram-ips,no-resolve)),Telegram
+  - OR,((GEOSITE,cloudflare),(RULE-SET,cloudflare-ips)),Cloudflare
+  - RULE-SET,refilter-domains,Заблок. сервисы
+  - MATCH,DIRECT`
+};
+let selectedRulesPreset = 'ru-bundle';
+const rulesPresetInputs = document.querySelectorAll('input[name="rulesPreset"]');
 let warpProxies = '';
 let warpProxyGroups = '';
 
 rulesToggle.addEventListener('change', function() {
-    const output = document.getElementById('yamlOutput').value.trim();
-    
+    const outputElement = document.getElementById('yamlOutput');
+    const output = outputElement.value.trimEnd();
+
     if (this.checked) {
-        // Добавляем правила, если их еще нет
-        if (!output.includes('rule-providers:')) {
-            document.getElementById('yamlOutput').value = output + '\n\n' + rulesContent;
-        }
+        rulesOptions.classList.remove('hidden');
+        outputElement.value = addOrReplaceRulesContent(output, selectedRulesPreset);
     } else {
-        // Удаляем правила, если они есть
-        if (output.includes('rule-providers:')) {
-            const rulesStartIndex = output.indexOf('rule-providers:');
-            const newOutput = output.substring(0, rulesStartIndex).trim();
-            document.getElementById('yamlOutput').value = newOutput;
-        }
+        rulesOptions.classList.add('hidden');
+        outputElement.value = removeRulesContent(output);
     }
 });
+
+rulesPresetInputs.forEach((input) => {
+    input.addEventListener('change', function() {
+        if (!this.checked) {
+            return;
+        }
+
+        selectedRulesPreset = this.value;
+
+        if (rulesToggle.checked) {
+            const outputElement = document.getElementById('yamlOutput');
+            const output = outputElement.value.trimEnd();
+            outputElement.value = addOrReplaceRulesContent(output, selectedRulesPreset);
+        }
+    });
+});
+
+function removeRulesContent(output) {
+    if (!output.includes('rule-providers:')) {
+        return output;
+    }
+
+    const rulesStartIndex = output.indexOf('rule-providers:');
+    return output.substring(0, rulesStartIndex).trimEnd();
+}
+
+function addOrReplaceRulesContent(output, presetKey) {
+    const presetContent = rulePresets[presetKey];
+
+    if (!presetContent) {
+        return output;
+    }
+
+    const baseOutput = removeRulesContent(output).trimEnd();
+
+    if (baseOutput) {
+        return baseOutput + '\n\n' + presetContent;
+    }
+
+    return presetContent;
+}
 document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('rules').disabled = true;
     document.getElementById('warp').disabled = true;

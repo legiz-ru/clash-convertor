@@ -36,26 +36,37 @@
 				<textarea id="yamlOutput" placeholder="Результат появится здесь..."
 				class="Output" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
 				<div class="switch">
-				<label class="toggle">
-					<input class="toggle-checkbox" type="checkbox" id="rules">
-					<div class="toggle-switch"></div>
-					<span class="toggle-label">Правила</span>
-				</label>
+                                <label class="toggle">
+                                        <input class="toggle-checkbox" type="checkbox" id="rules">
+                                        <div class="toggle-switch"></div>
+                                        <span class="toggle-label">Правила</span>
+                                </label>
 				<label class="toggle">
 					<input class="toggle-checkbox" type="checkbox" id="warp">
 					<div class="toggle-switch"></div>
 					<span class="toggle-label">WARP</span>
 				</label>
-				<label class="toggle">
-					<input class="toggle-checkbox" type="checkbox" id="config">
-					<div class="toggle-switch"></div>
-					<span class="toggle-label">Другой конфиг</span>
-				</label>
-				</div>
-			</div>
-			<button id="warpButton" style="width: 100%; max-width: 400px;"><span class="button__text">Другие проекты</span></button>
+                                <label class="toggle">
+                                        <input class="toggle-checkbox" type="checkbox" id="config">
+                                        <div class="toggle-switch"></div>
+                                        <span class="toggle-label">Другой конфиг</span>
+                                </label>
+                                </div>
+                                <div id="rulesOptions" class="hidden rule-options">
+                                        <span class="rule-options-title">Выбор набора правил:</span>
+                                        <label class="rule-option">
+                                                <input type="radio" name="rulesPreset" value="ru-bundle" checked>
+                                                <span>ru-bundle</span>
+                                        </label>
+                                        <label class="rule-option">
+                                                <input type="radio" name="rulesPreset" value="xkeen-mihomo">
+                                                <span>xkeen mihomo</span>
+                                        </label>
+                                </div>
+                        </div>
+                        <button id="warpButton" style="width: 100%; max-width: 400px;"><span class="button__text">Другие проекты</span></button>
 
-			<div id="info1">Конвертация URI (vless://, trojan:// и т.д.) может быть с ошибками.<br>Если вы заметили такую, прошу сообщить об этом <a id="link" href="https://github.com/DikozImpact/clash-convertor/issues" target="_blank">автору</a></div>
+                        <div id="info1">Конвертация URI (vless://, trojan:// и т.д.) может быть с ошибками.<br>Если вы заметили такую, прошу сообщить об этом <a id="link" href="https://github.com/DikozImpact/clash-convertor/issues" target="_blank">автору</a></div>
 		</div>
 	</div>
 	<div id="warpModal" class="modal">
