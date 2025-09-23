@@ -46,68 +46,105 @@ rules:
   - RULE-SET,skrepysh-proxy,PROXY
   - RULE-SET,ru-bundle,PROXY
   - MATCH,DIRECT`,
-    'xkeen-mihomo': `rule-providers:
-  refilter-domains:
+    'xkeen-mihomo': `log-level: silent
+allow-lan: true
+tproxy-port: 5000
+ipv6: true
+mode: rule
+external-controller: 0.0.0.0:9090
+external-ui: zashboard
+external-ui-url: https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip
+profile:
+  store-selected: true
+
+sniffer:
+  enable: true
+  sniff:
+    HTTP:
+    TLS:
+    QUIC:
+
+rule-providers:
+
+  ru-bundle:
+    type: http
+    url: https://github.com/legiz-ru/mihomo-rule-sets/raw/main/ru-bundle/rule.yaml
+    interval: 86400
+    proxy: DIRECT
+    behavior: domain
+    format: yaml
+  torrent-clients:
+    type: http
+    url: 'https://raw.githubusercontent.com/legiz-ru/mihomo-rule-sets/refs/heads/main/other/torrent-clients.yaml'
+    interval: 86400
+    proxy: DIRECT
+    behavior: classical
+    format: yaml
+  torrent-trackers:
     type: http
     behavior: domain
     format: mrs
-    url: https://github.com/legiz-ru/mihomo-rule-sets/raw/main/re-filter/domain-rule.mrs
-    path: ./rule-providers/refilter-domains.mrs
-
+    url: https://github.com/legiz-ru/mihomo-rule-sets/raw/main/other/torrent-trackers.mrs
+    path: ./rule-sets/torrent-trackers.mrs
+    interval: 86400
+  cloudflare-domains:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/cloudflare.mrs
+    path: ./rule-sets/cloudflare-domains.mrs
+    interval: 86400
   cloudflare-ips:
     type: http
     behavior: ipcidr
     format: mrs
     url: https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/cloudflare.mrs
-    path: ./rule-providers/cloudflare-ips.mrs
+    path: ./rule-sets/cloudflare-ips.mrs
     interval: 86400
-
-  discord:
-    type: inline
-    behavior: classical
-    format: text
-    payload:
-      - AND,((DOMAIN-KEYWORD,discord),(NOT,((DOMAIN-SUFFIX,ru))))
-      - AND,((RULE-SET,cloudflare-ips,no-resolve),(NETWORK,TCP),(OR,((DST-PORT,2000-2300),(DST-PORT,8443))))
-      - AND,((RULE-SET,cloudflare-ips,no-resolve),(NETWORK,UDP),(OR,((DST-PORT,19200-19400),(DST-PORT,50000-51000))))
-      - AND,((IP-CIDR,5.200.14.128/25,no-resolve),(NETWORK,UDP),(DST-PORT,50000-51000))
-      - AND,((IP-CIDR,34.0.0.0/15,no-resolve),(NETWORK,UDP),(DST-PORT,50000-51000))
-      - AND,((IP-CIDR,34.2.0.0/15,no-resolve),(NETWORK,UDP),(DST-PORT,50000-51000))
-      - AND,((IP-CIDR,35.192.0.0/11,no-resolve),(NETWORK,UDP),(DST-PORT,50000-51000))
-      - AND,((IP-CIDR,66.22.192.0/18,no-resolve),(NETWORK,UDP),(DST-PORT,50000-51000))
-      - AND,((IP-CIDR,138.128.136.0/21,no-resolve),(NETWORK,UDP),(DST-PORT,50000-51000))
-
+  telegram-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/telegram.mrs
+    path: ./rule-sets/telegram-domain.mrs
+    interval: 86400
   telegram-ips:
     type: http
     behavior: ipcidr
-    format: mrs
-    url: https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/telegram.mrs
-    path: ./rule-providers/telegram-ips.mrs
+    format: yaml
+    url: https://raw.githubusercontent.com/OMchik33/custom-rules/refs/heads/main/mihomo/telegram-ips.yaml
+    path: ./rule-sets/telegram-ips.yaml
     interval: 86400
-
-  meta-ips:
+  whatsapp-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/whatsapp.mrs
+    path: ./rule-sets/whatsapp-domain.mrs
+    interval: 86400
+  discord_domains:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://github.com/MetaCubeX/meta-rules-dat/raw/meta/geo/geosite/discord.mrs
+    path: ./rule-sets/discord_domains.mrs
+    interval: 86400
+  discord_voiceips:
     type: http
     behavior: ipcidr
     format: mrs
-    url: https://github.com/zxc-rv/assets/raw/refs/heads/main/rules/meta-ips.mrs
-    path: ./rule-providers/meta-ips.mrs
+    url: https://github.com/legiz-ru/mihomo-rule-sets/raw/main/other/discord-voice-ip-list.mrs
+    path: ./rule-sets/discord_voiceips.mrs
     interval: 86400
 
 rules:
-  - AND,((DST-PORT,443),(NETWORK,UDP)),QUIC
-  - OR,((DOMAIN-SUFFIX,gql.twitch.tv),(DOMAIN-SUFFIX,usher.ttvnw.net)),Заблок. сервисы
-  - GEOSITE,category-ai-!cn,AI
-  - GEOSITE,steam,Steam
-  - GEOSITE,spotify,Spotify
-  - GEOSITE,reddit,Reddit
-  - OR,((GEOSITE,youtube),(DOMAIN-SUFFIX,googleusercontent.com)),YouTube
-  - GEOSITE,twitch,Twitch
-  - GEOSITE,twitter,Twitter
-  - RULE-SET,discord,Discord
-  - OR,((GEOSITE,meta),(RULE-SET,meta-ips,no-resolve)),Meta
-  - OR,((GEOSITE,telegram),(RULE-SET,telegram-ips,no-resolve)),Telegram
-  - OR,((GEOSITE,cloudflare),(RULE-SET,cloudflare-ips)),Cloudflare
-  - RULE-SET,refilter-domains,Заблок. сервисы
+  - OR,((DOMAIN,ipwho.is),(DOMAIN,api.ip.sb),(DOMAIN,ipapi.co),(DOMAIN,ipinfo.io)),PROXY
+  - OR,((RULE-SET,telegram-domain),(RULE-SET,telegram-ips)),PROXY
+  - OR,((RULE-SET,whatsapp-domain)),PROXY
+  - OR,((RULE-SET,discord_domains),(RULE-SET,discord_voiceips)),PROXY
+  - RULE-SET,torrent-trackers,DIRECT
+  - OR,((RULE-SET,cloudflare-domains),(RULE-SET,cloudflare-ips)),PROXY
+  - RULE-SET,ru-bundle,PROXY
   - MATCH,DIRECT`
 };
 let selectedRulesPreset = 'ru-bundle';
