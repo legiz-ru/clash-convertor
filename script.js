@@ -1,5 +1,5 @@
 document.getElementById('warpButton').onclick = function() {
-    window.location.href = 'https://my-other-projects.vercel.app/';
+    window.location.href = 'https://github.com/legiz-ru/';
 }
 
 const configToggle = document.getElementById('config');
