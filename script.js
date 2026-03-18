@@ -578,29 +578,47 @@ modal.style.cssText = `
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0,0,0,0.5);
+    background: rgba(0,0,0,.78);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
     display: none;
     justify-content: center;
     align-items: center;
-    z-index: 1000;
+    z-index: 2000;
 `;
 
 const modalContent = document.createElement('div');
 modalContent.style.cssText = `
-    background-color: #3A3C4C;
-    padding: 20px;
-    border-radius: 5px;
-    max-width: 80%;
-    width: 400px;
+    background: #16161f;
+    border: 1px solid rgba(248,113,113,.25);
+    padding: 28px 28px 24px;
+    border-radius: 20px;
+    max-width: 90%;
+    width: 420px;
     text-align: center;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    box-shadow: 0 32px 80px rgba(0,0,0,.65);
 `;
 
 const modalText = document.createElement('p');
-modalText.style.marginBottom = '20px';
+modalText.style.cssText = 'margin-bottom: 20px; color: #e8e6f0; font-size: 14px; line-height: 1.6;';
 
 const modalCloseBtn = document.createElement('button');
 modalCloseBtn.textContent = 'Закрыть';
+modalCloseBtn.style.cssText = `
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    height: 38px;
+    padding: 0 24px;
+    background: linear-gradient(135deg, #7c5cfc, #9b6dff);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all .2s;
+`;
+modalCloseBtn.onmouseover = () => { modalCloseBtn.style.background = 'linear-gradient(135deg, #8b6cff, #a97dff)'; };
+modalCloseBtn.onmouseout  = () => { modalCloseBtn.style.background = 'linear-gradient(135deg, #7c5cfc, #9b6dff)'; };
 modalCloseBtn.onclick = () => modal.style.display = 'none';
 
 modalContent.appendChild(modalText);
@@ -643,6 +661,11 @@ function convert() {
         try {
             if (singleLine.startsWith('vless://')) {
                 const proxy = parseVlessUri(singleLine);
+                const xhttpEl = document.getElementById('xhttpToggle');
+                if (proxy.network === 'xhttp' && xhttpEl && !xhttpEl.checked) {
+                    showError('Ссылка xhttp проигнорирована (отключено в настройках)');
+                    return;
+                }
                 config = generateVlessConfig(proxy);
             } else if (singleLine.startsWith('vmess://')) {
                 const proxy = parseVmessUri(singleLine);
@@ -686,6 +709,10 @@ function convert() {
         try {
             if (trimmedLine.startsWith('vless://')) {
                 const proxy = parseVlessUri(trimmedLine);
+                const xhttpEl = document.getElementById('xhttpToggle');
+                if (proxy.network === 'xhttp' && xhttpEl && !xhttpEl.checked) {
+                    continue; // xhttp отключён — пропускаем
+                }
                 proxies.push(proxy);
             } else if (trimmedLine.startsWith('vmess://')) {
                 const proxy = parseVmessUri(trimmedLine);
@@ -772,84 +799,123 @@ proxy-providers:
 }
 
 function parseHysteria2Uri(line) {
-    // Исправляем регулярное выражение для корректного парсинга
-    const match = line.match(/(?:hysteria2|hy2):\/\/([^@]+)@([^:]+):(\d+)(?:\/?\?([^#]*))?(?:#(.*))?/);
-    if (!match) {
+    let url;
+    try {
+        url = new URL(line);
+    } catch (e) {
         throw new Error('Invalid Hysteria2 URI format');
     }
 
-    const [_, password, server, portStr, paramsStr = "", name = ""] = match;
-    const port = parseInt(portStr, 10);
-    const decodedName = decodeURIComponent(name).trim() || `Hysteria2 ${server}:${port}`;
+    const server = url.hostname;
+    const port = url.port ? parseInt(url.port, 10) : 443;
+    const password = decodeURIComponent(url.username);
+    const name = decodeURIComponent(url.hash.slice(1)).trim() || `Hysteria2 ${server}:${port}`;
+    const params = url.searchParams;
 
     const proxy = {
         type: "hysteria2",
-        name: decodedName,
+        name: name,
         server: server,
         port: port,
-        password: decodeURIComponent(password),
+        password: password,
         sni: undefined,
         obfs: undefined,
         "obfs-password": undefined,
-        "skip-cert-verify": false,
+        "skip-cert-verify": true,
         fingerprint: undefined,
+        alpn: undefined,
+        up: undefined,
+        down: undefined,
+        ports: undefined,
         tfo: false
     };
 
-    // Парсинг параметров
-    const params = new URLSearchParams(paramsStr);
-    
-    // Обработка obfs и obfs-password
-    if (params.has('obfs')) {
-        proxy.obfs = params.get('obfs');
-        if (proxy.obfs === 'none') {
-            proxy.obfs = undefined;
-        } else if (params.has('obfs-password')) {
-            proxy["obfs-password"] = params.get('obfs-password');
+    // Обработка obfs
+    const obfs = params.get('obfs');
+    if (obfs && obfs !== 'none' && obfs !== 'null' && obfs !== 'undefined') {
+        proxy.obfs = obfs;
+        const obfsPassword = params.get('obfs-password');
+        if (obfsPassword) {
+            proxy["obfs-password"] = obfsPassword;
         }
     }
 
-    // Остальные параметры
-    proxy.sni = params.get('sni') || params.get('peer');
-    proxy["skip-cert-verify"] = params.has('insecure') && /(TRUE)|1/i.test(params.get('insecure'));
-    proxy.fingerprint = params.get('fp') || params.get('fingerprint') || params.get('pinSHA256');
-    proxy.tfo = params.has('tfo') && /(TRUE)|1/i.test(params.get('tfo'));
+    // SNI
+    proxy.sni = params.get('sni') || params.get('peer') || undefined;
+
+    // skip-cert-verify: по умолчанию true (как в moshen), переопределяем если явно задано
+    if (params.has('insecure')) {
+        proxy["skip-cert-verify"] = /(true)|1/i.test(params.get('insecure'));
+    }
+
+    // Fingerprint (pinSHA256)
+    proxy.fingerprint = params.get('pinSHA256') || params.get('fp') || params.get('fingerprint') || undefined;
+
+    // ALPN
+    const alpn = params.get('alpn');
+    if (alpn) {
+        proxy.alpn = alpn.split(',');
+    }
+
+    // Up/Down bandwidth
+    const up = params.get('up');
+    const down = params.get('down');
+    if (up) proxy.up = up;
+    if (down) proxy.down = down;
+
+    // Multi-port (mport)
+    const mport = params.get('mport');
+    if (mport) proxy.ports = mport;
+
+    proxy.tfo = params.has('tfo') && /(true)|1/i.test(params.get('tfo'));
 
     return proxy;
 }
 
 function parseVlessUri(line) {
-    line = line.split('vless://')[1];
-    let isShadowrocket;
-    let parsed = /^(.*?)@(.*?):(\d+)\/?(\?(.*?))?(?:#(.*?))?$/.exec(line);
-    if (!parsed) {
-        let [_, base64, other] = /^(.*?)(\?.*?$)/.exec(line);
-        line = `${atob(base64)}${other}`;
-        parsed = /^(.*?)@(.*?):(\d+)\/?(\?(.*?))?(?:#(.*?))?$/.exec(line);
-        isShadowrocket = true;
-    }
-    let [__, uuid, server, portStr, ___, addons = "", name] = parsed;
-    if (isShadowrocket) {
-        uuid = uuid.replace(/^.*?:/g, "");
+    // Поддержка Shadowrocket base64-encoded формата: vless://BASE64?params#name
+    const afterScheme = line.slice('vless://'.length);
+    const qIdx = afterScheme.indexOf('?');
+    const hashIdx = afterScheme.indexOf('#');
+    const atIdx = afterScheme.indexOf('@');
+    const endOfHost = qIdx !== -1 ? qIdx : (hashIdx !== -1 ? hashIdx : afterScheme.length);
+
+    // Если @ отсутствует или находится после ? — вероятно Shadowrocket base64
+    if (atIdx === -1 || atIdx > endOfHost) {
+        const base64Part = afterScheme.slice(0, endOfHost);
+        const rest = afterScheme.slice(endOfHost);
+        try {
+            const decoded = atob(base64Part);
+            // decoded: `uuid@host:port` или `cipher:uuid@host:port`
+            line = 'vless://' + decoded + rest;
+        } catch (e) {}
     }
 
-    const port = parseInt(portStr, 10);
-    uuid = decodeURIComponent(uuid);
-    name = decodeURIComponent(name || '').trim();
+    let url;
+    try {
+        url = new URL(line);
+    } catch (e) {
+        throw new Error('Invalid VLESS URI format');
+    }
+
+    const server = url.hostname;
+    const port = url.port ? parseInt(url.port, 10) : 80;
+    // Shadowrocket cipher:uuid → username=cipher, password=uuid; normal → username=uuid
+    const uuid = url.password ? decodeURIComponent(url.password) : decodeURIComponent(url.username);
+    const name = decodeURIComponent(url.hash.slice(1)).trim() || `VLESS ${server}:${port}`;
+    const params = url.searchParams;
 
     const proxy = {
         type: "vless",
-        name: name || `VLESS ${server}:${port}`,
-        server,
-        port,
-        uuid,
+        name: name,
+        server: server,
+        port: port,
+        uuid: uuid,
+        udp: true,
         tls: false,
         network: "tcp",
         alpn: [],
-        "ws-opts": {
-            "v2ray-http-upgrade": false,
-            "v2ray-http-upgrade-fast-open": false
-        },
+        "ws-opts": {},
         "http-opts": {},
         "grpc-opts": {},
         "reality-opts": {},
@@ -857,113 +923,119 @@ function parseVlessUri(line) {
         sni: undefined
     };
 
-    const params = {};
-    if (addons) {
-        for (const addon of addons.split('&')) {
-            const [key, valueRaw] = addon.split('=');
-            const value = decodeURIComponent(valueRaw || '');
-            params[key] = value;
-        }
-    }
-
-    // Обработка параметров безопасности
-    proxy.tls = (params.security && params.security !== 'none') || undefined;
-    if (isShadowrocket && /TRUE|1/i.test(params.tls)) {
+    // Безопасность (TLS / Reality)
+    const security = (params.get('security') || '').toLowerCase();
+    if (security.endsWith('tls') || security === 'reality') {
         proxy.tls = true;
-        params.security = params.security || "reality";
-    }
-    
-    proxy.sni = params.sni || params.peer;
-    proxy.flow = params.flow ? 'xtls-rprx-vision' : undefined;
-    proxy['skip-cert-verify'] = /(TRUE)|1/i.test(params.allowInsecure || '');
-    proxy['client-fingerprint'] = params.fp;
-
-    // Обработка ALPN
-    if (params.alpn) {
-        const alpnStr = params.alpn.replace(/%2F/g, '/');
-        proxy.alpn = alpnStr.split(',');
-    }
-
-    // Обработка Reality параметров
-    if (params.security === "reality") {
-        if (params.pbk) {
-            proxy['reality-opts']['public-key'] = params.pbk;
+        proxy['client-fingerprint'] = params.get('fp') || 'chrome';
+        const alpn = params.get('alpn');
+        if (alpn) {
+            proxy.alpn = alpn.replace(/%2C/gi, ',').split(',');
         }
-        if (params.sid) {
-            proxy['reality-opts']['short-id'] = params.sid;
+        const pcs = params.get('pcs');
+        if (pcs) proxy.fingerprint = pcs;
+    }
+    // Shadowrocket может передавать TLS через параметр tls=1
+    if (!proxy.tls && /true|1/i.test(params.get('tls') || '')) {
+        proxy.tls = true;
+    }
+
+    // SNI
+    proxy.sni = params.get('sni') || params.get('peer') || undefined;
+
+    // Flow (только xtls-rprx-vision поддерживается mihomo)
+    const flow = (params.get('flow') || '').toLowerCase();
+    if (flow === 'xtls-rprx-vision') {
+        proxy.flow = 'xtls-rprx-vision';
+    }
+
+    // Encryption
+    const encryption = params.get('encryption');
+    if (encryption) proxy.encryption = encryption;
+
+    // skip-cert-verify
+    proxy['skip-cert-verify'] = /(true)|1/i.test(params.get('allowInsecure') || params.get('insecure') || '');
+
+    // Reality opts
+    if (security === 'reality') {
+        const pbk = params.get('pbk');
+        const sid = params.get('sid');
+        if (pbk || sid) {
+            proxy['reality-opts'] = {};
+            if (pbk) proxy['reality-opts']['public-key'] = pbk;
+            if (sid) proxy['reality-opts']['short-id'] = sid;
         }
     }
 
-    // Определение типа сети и параметров http-upgrade
-    if (params.type === 'httpupgrade') {
+    // packetEncoding → packet-addr / xudp
+    const packetEncoding = params.get('packetEncoding');
+    if (packetEncoding === 'packet') {
+        proxy['packet-addr'] = true;
+    } else if (packetEncoding !== 'none') {
+        proxy.xudp = true;
+    }
+
+    // Тип сети
+    const rawType = (params.get('type') || 'tcp').toLowerCase();
+    const headerType = (params.get('headerType') || '').toLowerCase();
+
+    if (rawType === 'httpupgrade') {
         proxy.network = 'ws';
         proxy['ws-opts']['v2ray-http-upgrade'] = true;
         proxy['ws-opts']['v2ray-http-upgrade-fast-open'] = true;
+    } else if (headerType === 'http') {
+        proxy.network = 'http';
     } else {
-        proxy.network = params.type || 'tcp';
-        if (!['tcp', 'ws', 'http', 'grpc', 'h2'].includes(proxy.network)) {
-            proxy.network = 'tcp';
-        }
+        proxy.network = rawType;
     }
 
-    // Обработка параметров для каждого типа подключения
+    // Параметры по типу сети
     switch (proxy.network) {
-        case 'ws':
-            if (params.path) {
-                proxy['ws-opts'].path = decodeURIComponent(params.path);
+        case 'ws': {
+            const path = params.get('path');
+            if (path) proxy['ws-opts'].path = decodeURIComponent(path);
+            const host = params.get('host') || params.get('obfsParam');
+            if (host) {
+                proxy['ws-opts'].headers = proxy['ws-opts'].headers || {};
+                proxy['ws-opts'].headers['Host'] = host;
             }
-            
-            if (params.host || params.obfsParam) {
-                const host = params.host || params.obfsParam;
-                try {
-                    const parsedHeaders = JSON.parse(host);
-                    if (Object.keys(parsedHeaders).length > 0) {
-                        proxy['ws-opts'].headers = parsedHeaders;
-                    }
-                } catch (e) {
-                    if (host) {
-                        proxy['ws-opts'].headers = proxy['ws-opts'].headers || {};
-                        proxy['ws-opts'].headers.Host = host;
-                    }
+            const ed = params.get('ed');
+            if (ed) {
+                const med = parseInt(ed, 10);
+                if (!isNaN(med)) {
+                    proxy['ws-opts']['max-early-data'] = med;
+                    proxy['ws-opts']['early-data-header-name'] = 'Sec-WebSocket-Protocol';
                 }
             }
-            
-            if (params.eh && params.eh.includes(':')) {
-                const [headerName, headerValue] = params.eh.split(':').map(s => s.trim());
-                if (headerName && headerValue) {
-                    proxy['ws-opts'].headers = proxy['ws-opts'].headers || {};
-                    proxy['ws-opts'].headers[headerName] = headerValue;
-                }
-            }
+            const eh = params.get('eh');
+            if (eh) proxy['ws-opts']['early-data-header-name'] = eh;
             break;
-            
-        case 'grpc':
-            proxy['grpc-opts'] = {};
-            if (params.serviceName) {
-                proxy['grpc-opts']['grpc-service-name'] = decodeURIComponent(params.serviceName);
-            }
+        }
+        case 'grpc': {
+            const serviceName = params.get('serviceName');
+            if (serviceName) proxy['grpc-opts']['grpc-service-name'] = decodeURIComponent(serviceName);
             break;
-            
-        case 'http':
-            proxy['http-opts'] = {
-                headers: {}
-            };
-            
-            if (params.path) {
-                proxy['http-opts'].path = decodeURIComponent(params.path);
-            }
-            
-            if (params.host || params.obfsParam) {
-                const host = params.host || params.obfsParam;
-                try {
-                    proxy['http-opts'].headers = JSON.parse(host);
-                } catch (e) {
-                    if (host) {
-                        proxy['http-opts'].headers.Host = host;
-                    }
-                }
-            }
+        }
+        case 'http': {
+            const path = params.get('path');
+            const host = params.get('host');
+            proxy['http-opts'] = { headers: {} };
+            if (path) proxy['http-opts'].path = decodeURIComponent(path);
+            if (host) proxy['http-opts'].headers['Host'] = host;
             break;
+        }
+        case 'xhttp':
+        case 'splithttp': {
+            proxy.network = 'xhttp';
+            proxy['splithttp-opts'] = {};
+            const path = params.get('path');
+            if (path) proxy['splithttp-opts'].path = path;
+            const host = params.get('host');
+            if (host) proxy['splithttp-opts'].host = host;
+            const mode = params.get('mode');
+            if (mode) proxy['splithttp-opts'].mode = mode;
+            break;
+        }
     }
 
     return proxy;
@@ -1214,8 +1286,32 @@ function generateHysteria2Config(proxy) {
     }
   }
 
+  if (proxy.alpn && proxy.alpn.length > 0) {
+    config += `
+  alpn:`;
+    proxy.alpn.forEach(a => {
+      config += `
+    - '${a}'`;
+    });
+  }
+
+  if (proxy.up) {
+    config += `
+  up: '${proxy.up}'`;
+  }
+
+  if (proxy.down) {
+    config += `
+  down: '${proxy.down}'`;
+  }
+
+  if (proxy.ports) {
+    config += `
+  ports: '${proxy.ports}'`;
+  }
+
   config += `
-  skip-cert-verify: ${proxy["skip-cert-verify"] || false}
+  skip-cert-verify: ${proxy["skip-cert-verify"] !== undefined ? proxy["skip-cert-verify"] : true}
   tfo: ${proxy.tfo || false}`;
 
   if (proxy.fingerprint) {
@@ -1494,6 +1590,10 @@ function generateVlessConfig(proxy) {
     config += `
   flow: '${proxy.flow}'`;
   }
+  if (proxy.encryption) {
+    config += `
+  encryption: '${proxy.encryption}'`;
+  }
   if (proxy['skip-cert-verify'] !== undefined) {
     config += `
   skip-cert-verify: ${proxy['skip-cert-verify']}`;
@@ -1509,6 +1609,13 @@ function generateVlessConfig(proxy) {
       config += `
     - '${a}'`;
     });
+  }
+  if (proxy['packet-addr']) {
+    config += `
+  packet-addr: true`;
+  } else if (proxy.xudp) {
+    config += `
+  xudp: true`;
   }
   if (proxy.network) {
     config += `
@@ -1528,11 +1635,10 @@ function generateVlessConfig(proxy) {
     }
   }
 
-  // Генерация ws-opts с поддержкой http-upgrade
-  if (proxy.network === 'ws' && proxy["ws-opts"]) {
-  config += `
+  // ws-opts
+  if (proxy.network === 'ws' && proxy['ws-opts']) {
+    config += `
   ws-opts:`;
-  if (proxy['ws-opts']) {
     if (proxy['ws-opts'].path) {
       config += `
     path: '${proxy['ws-opts'].path}'`;
@@ -1545,6 +1651,14 @@ function generateVlessConfig(proxy) {
       ${key}: '${value}'`;
       }
     }
+    if (proxy['ws-opts']['max-early-data']) {
+      config += `
+    max-early-data: ${proxy['ws-opts']['max-early-data']}`;
+    }
+    if (proxy['ws-opts']['early-data-header-name']) {
+      config += `
+    early-data-header-name: '${proxy['ws-opts']['early-data-header-name']}'`;
+    }
     if (proxy['ws-opts']['v2ray-http-upgrade']) {
       config += `
     v2ray-http-upgrade: true`;
@@ -1554,12 +1668,29 @@ function generateVlessConfig(proxy) {
     v2ray-http-upgrade-fast-open: true`;
     }
   }
-    }
 
   if (proxy.network === 'grpc' && proxy['grpc-opts'] && proxy['grpc-opts']['grpc-service-name']) {
     config += `
   grpc-opts:
     grpc-service-name: '${proxy['grpc-opts']['grpc-service-name']}'`;
+  }
+
+  // xhttp/splithttp-opts
+  if (proxy.network === 'xhttp' && proxy['splithttp-opts']) {
+    config += `
+  splithttp-opts:`;
+    if (proxy['splithttp-opts'].path) {
+      config += `
+    path: '${proxy['splithttp-opts'].path}'`;
+    }
+    if (proxy['splithttp-opts'].host) {
+      config += `
+    host: '${proxy['splithttp-opts'].host}'`;
+    }
+    if (proxy['splithttp-opts'].mode) {
+      config += `
+    mode: '${proxy['splithttp-opts'].mode}'`;
+    }
   }
 
   config += `\n\nproxy-groups:

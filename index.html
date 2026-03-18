@@ -1,86 +1,131 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-	<link rel="icon" href="Clash.webp" type="image/x-icon">
-	<link rel="stylesheet" href="styles.css">
-	<script defer src="script.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d0d12">
+  <link rel="icon" href="Clash.webp" type="image/x-icon">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="script.js"></script>
   <title>Clash Convertor</title>
 </head>
 <body>
-  <div class="wrapper">
-	<div id="logo">
-    <img src="logo.png" alt="Логотип" style="display: inline-block; vertical-align: middle; max-width: 100px;">
-    <span class="logo-text">Clash Convertor</span>
-</div>
-		<div class="infobtn">
-			<div class="file-list" id="fileList"> 
-			<textarea 
-				id="yamlInput" 
-				class="Input" 
-				rows="1" 
-				placeholder="Вставьте подписку сюда..."
-				autocomplete="off" 
-				autocorrect="off" 
-				autocapitalize="off" 
-				spellcheck="false"
-				></textarea>
-			<button onclick="convert()">Конвертировать</button>
-			</div>
-			<div class="result" id="output">
-				<div class="button-container hidden" id="downloadBtnCT">
-					<button class="download-btn" id="downloadBtn">Скачать</button>
-					<button class="download-btn" id="copyBtn">Скопировать</button>
-				</div>
-				<textarea id="yamlOutput" placeholder="Результат появится здесь..."
-				class="Output" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
-				<div class="switch">
-                                <label class="toggle">
-                                        <input class="toggle-checkbox" type="checkbox" id="rules">
-                                        <div class="toggle-switch"></div>
-                                        <span class="toggle-label">Правила</span>
-                                </label>
-				<label class="toggle">
-					<input class="toggle-checkbox" type="checkbox" id="warp">
-					<div class="toggle-switch"></div>
-					<span class="toggle-label">WARP</span>
-				</label>
-                                <label class="toggle">
-                                        <input class="toggle-checkbox" type="checkbox" id="config">
-                                        <div class="toggle-switch"></div>
-                                        <span class="toggle-label">Другой конфиг</span>
-                                </label>
-                                </div>
-                                <div id="rulesOptions" class="hidden rule-options">
-                                        <span class="rule-options-title">Выбор набора правил:</span>
-                                        <label class="rule-option">
-                                                <input type="radio" name="rulesPreset" value="ru-bundle" checked>
-                                                <span>ru-bundle</span>
-                                        </label>
-                                        <label class="rule-option">
-                                                <input type="radio" name="rulesPreset" value="xkeen-mihomo">
-                                                <span>xkeen mihomo</span>
-                                        </label>
-                                </div>
-                        </div>
-                        <button id="warpButton" style="width: 100%; max-width: 400px;"><span class="button__text">Другие проекты</span></button>
+  <div class="card">
 
-                        <div id="info1">Конвертация URI (vless://, trojan:// и т.д.) может быть с ошибками.<br>Если вы заметили такую, прошу сообщить об этом <a id="link" href="https://github.com/DikozImpact/clash-convertor/issues" target="_blank">автору</a></div>
-		</div>
-	</div>
-	<div id="warpModal" class="modal">
-  <div class="modal-content">
-    <span class="close">&times;</span>
-    <p align="center">Выберите конфиг WARP. Конфиг можно получить <a id="link" href="https://config-generator-warp.vercel.app/" target="_blank">тут</a></p>
-    <button id="selectWarpConfig">Выбрать конфиг</button>
+    <div class="header">
+      <div class="logo-wrap">
+        <img src="logo.png" alt="Логотип">
+      </div>
+      <div class="header-text">
+        <h1>Clash Convertor</h1>
+        <p>Конвертация прокси-ссылок в mihomo конфиг</p>
+      </div>
+    </div>
+
+    <div class="field-label">Ссылка или подписка</div>
+    <textarea
+      id="yamlInput"
+      class="Input"
+      rows="1"
+      placeholder="vless://, trojan://, ss://, hy2://, https://..."
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
+    ></textarea>
+
+    <div class="options-row">
+      <label class="toggle" title="Конвертировать xhttp (prizrak-box mihomo fork config)">
+        <input class="toggle-checkbox" type="checkbox" id="xhttpToggle" checked>
+        <div class="toggle-switch"></div>
+        <span class="toggle-label">xhttp (prizrak-box)</span>
+      </label>
+      <label class="toggle">
+        <input class="toggle-checkbox" type="checkbox" id="rules">
+        <div class="toggle-switch"></div>
+        <span class="toggle-label">Правила</span>
+      </label>
+      <label class="toggle">
+        <input class="toggle-checkbox" type="checkbox" id="warp">
+        <div class="toggle-switch"></div>
+        <span class="toggle-label">WARP</span>
+      </label>
+      <label class="toggle">
+        <input class="toggle-checkbox" type="checkbox" id="config">
+        <div class="toggle-switch"></div>
+        <span class="toggle-label">Другой конфиг</span>
+      </label>
+    </div>
+
+    <div id="rulesOptions" class="hidden rule-options">
+      <span class="rule-options-title">Выбор набора правил</span>
+      <label class="rule-option">
+        <input type="radio" name="rulesPreset" value="ru-bundle" checked>
+        <span>ru-bundle</span>
+      </label>
+      <label class="rule-option">
+        <input type="radio" name="rulesPreset" value="xkeen-mihomo">
+        <span>xkeen mihomo</span>
+      </label>
+    </div>
+
+    <button class="btn-convert" onclick="convert()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      Конвертировать
+    </button>
+
+    <div class="result-header">
+      <span class="field-label" style="margin:0">Результат</span>
+      <div class="button-container hidden" id="downloadBtnCT">
+        <button class="download-btn" id="downloadBtn">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Скачать
+        </button>
+        <button class="download-btn" id="copyBtn">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          Скопировать
+        </button>
+      </div>
+    </div>
+
+    <div class="result" id="output">
+      <textarea
+        id="yamlOutput"
+        class="Output"
+        placeholder="Результат появится здесь..."
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+      ></textarea>
+    </div>
+
+    <button id="warpButton">
+      <span class="button__text">Другие проекты</span>
+    </button>
+
+    <div id="info1">
+      Конвертация URI (vless://, trojan:// и т.д.) может быть с ошибками.<br>
+      Если вы заметили такую, прошу сообщить об этом <a id="link" href="https://github.com/DikozImpact/clash-convertor/issues" target="_blank">автору</a>
+    </div>
+
   </div>
-</div>
-<div id="configModal" class="modal">
-  <div class="modal-content">
-    <span class="close" onclick="closeConfigModal()">&times;</span>
-    <p align="center">Выберите конфиг .yaml для слияния (Всё ещё в разработке)</p>
-    <button id="selectConfig">Выбрать конфиг</button>
+
+  <div id="warpModal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <p>Выберите конфиг WARP. Конфиг можно получить <a href="https://config-generator-warp.vercel.app/" target="_blank">тут</a></p>
+      <button id="selectWarpConfig">Выбрать конфиг</button>
+    </div>
   </div>
-</div>
-</body></html>
+
+  <div id="configModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeConfigModal()">&times;</span>
+      <p>Выберите конфиг .yaml для слияния (Всё ещё в разработке)</p>
+      <button id="selectConfig">Выбрать конфиг</button>
+    </div>
+  </div>
+
+</body>
+</html>
