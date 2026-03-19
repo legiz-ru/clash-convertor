@@ -872,6 +872,70 @@ function parseHysteria2Uri(line) {
     return proxy;
 }
 
+function parseRangeConfig(v) {
+    if (typeof v === 'number') {
+        const n = Math.trunc(v);
+        return { from: n, to: n };
+    }
+    if (typeof v === 'string') {
+        const parts = v.split('-');
+        if (parts.length === 2) {
+            const from = parseInt(parts[0], 10);
+            const to = parseInt(parts[1], 10);
+            if (!isNaN(from) && !isNaN(to)) return { from, to };
+        }
+        const n = parseInt(v, 10);
+        if (!isNaN(n)) return { from: n, to: n };
+    }
+    return null;
+}
+
+function parseSplitHTTPExtra(extra, opts) {
+    if (extra.noGRPCHeader === true) opts['no-grpc-header'] = true;
+    if (extra.noSSEHeader === true) opts['no-sse-header'] = true;
+    if (extra.xPaddingBytes != null) {
+        const rc = parseRangeConfig(extra.xPaddingBytes);
+        if (rc) opts['x-padding-bytes'] = rc;
+    }
+    if (extra.xPaddingObfsMode === true) opts['x-padding-obfs-mode'] = true;
+    if (typeof extra.uplinkHTTPMethod === 'string' && extra.uplinkHTTPMethod)
+        opts['uplink-http-method'] = extra.uplinkHTTPMethod;
+    if (extra.scMaxEachPostBytes != null) {
+        const rc = parseRangeConfig(extra.scMaxEachPostBytes);
+        if (rc) opts['max-each-post-bytes'] = rc;
+    }
+    if (extra.scMinPostsIntervalMs != null) {
+        const rc = parseRangeConfig(extra.scMinPostsIntervalMs);
+        if (rc) opts['min-posts-interval'] = rc;
+    }
+    if (typeof extra.scMaxBufferedPosts === 'number' && extra.scMaxBufferedPosts !== 0)
+        opts['max-buffered-posts'] = Math.trunc(extra.scMaxBufferedPosts);
+    if (extra.scStreamUpServerSecs != null) {
+        const rc = parseRangeConfig(extra.scStreamUpServerSecs);
+        if (rc) opts['stream-up-server-secs'] = rc;
+    }
+    if (extra.xmux && typeof extra.xmux === 'object') {
+        const xmux = extra.xmux;
+        const xmuxOpts = {};
+        const xmuxFields = [
+            ['maxConcurrency', 'max-concurrency'],
+            ['maxConnections', 'max-connections'],
+            ['cMaxReuseTimes', 'c-max-reuse-times'],
+            ['hMaxRequestTimes', 'h-max-request-times'],
+            ['hMaxReusableSecs', 'h-max-reusable-secs'],
+        ];
+        for (const [src, dst] of xmuxFields) {
+            if (xmux[src] != null) {
+                const rc = parseRangeConfig(xmux[src]);
+                if (rc) xmuxOpts[dst] = rc;
+            }
+        }
+        if (typeof xmux.hKeepAlivePeriod === 'number')
+            xmuxOpts['h-keep-alive-period'] = Math.trunc(xmux.hKeepAlivePeriod);
+        if (Object.keys(xmuxOpts).length > 0) opts['xmux'] = xmuxOpts;
+    }
+}
+
 function parseVlessUri(line) {
     // Поддержка Shadowrocket base64-encoded формата: vless://BASE64?params#name
     const afterScheme = line.slice('vless://'.length);
@@ -1034,6 +1098,13 @@ function parseVlessUri(line) {
             if (host) proxy['splithttp-opts'].host = host;
             const mode = params.get('mode');
             if (mode) proxy['splithttp-opts'].mode = mode;
+            const extraRaw = params.get('extra');
+            if (extraRaw) {
+                try {
+                    const extraMap = JSON.parse(extraRaw);
+                    parseSplitHTTPExtra(extraMap, proxy['splithttp-opts']);
+                } catch (_) {}
+            }
             break;
         }
     }
@@ -1677,19 +1748,35 @@ function generateVlessConfig(proxy) {
 
   // xhttp/splithttp-opts
   if (proxy.network === 'xhttp' && proxy['splithttp-opts']) {
+    const so = proxy['splithttp-opts'];
     config += `
   splithttp-opts:`;
-    if (proxy['splithttp-opts'].path) {
-      config += `
-    path: '${proxy['splithttp-opts'].path}'`;
+    if (so.path)  config += `\n    path: '${so.path}'`;
+    if (so.host)  config += `\n    host: '${so.host}'`;
+    if (so.mode)  config += `\n    mode: '${so.mode}'`;
+    if (so['no-grpc-header'])    config += `\n    no-grpc-header: true`;
+    if (so['no-sse-header'])     config += `\n    no-sse-header: true`;
+    if (so['x-padding-obfs-mode']) config += `\n    x-padding-obfs-mode: true`;
+    if (so['uplink-http-method']) config += `\n    uplink-http-method: '${so['uplink-http-method']}'`;
+    if (so['max-buffered-posts'] != null) config += `\n    max-buffered-posts: ${so['max-buffered-posts']}`;
+    const rangeFields = [
+      'x-padding-bytes', 'max-each-post-bytes', 'min-posts-interval',
+      'stream-up-server-secs',
+    ];
+    for (const f of rangeFields) {
+      if (so[f]) config += `\n    ${f}:\n      from: ${so[f].from}\n      to: ${so[f].to}`;
     }
-    if (proxy['splithttp-opts'].host) {
-      config += `
-    host: '${proxy['splithttp-opts'].host}'`;
-    }
-    if (proxy['splithttp-opts'].mode) {
-      config += `
-    mode: '${proxy['splithttp-opts'].mode}'`;
+    if (so.xmux && typeof so.xmux === 'object') {
+      config += `\n    xmux:`;
+      const xmuxRangeFields = [
+        'max-concurrency', 'max-connections', 'c-max-reuse-times',
+        'h-max-request-times', 'h-max-reusable-secs',
+      ];
+      for (const f of xmuxRangeFields) {
+        if (so.xmux[f]) config += `\n      ${f}:\n        from: ${so.xmux[f].from}\n        to: ${so.xmux[f].to}`;
+      }
+      if (so.xmux['h-keep-alive-period'] != null)
+        config += `\n      h-keep-alive-period: ${so.xmux['h-keep-alive-period']}`;
     }
   }
 
