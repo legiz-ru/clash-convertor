@@ -661,11 +661,6 @@ function convert() {
         try {
             if (singleLine.startsWith('vless://')) {
                 const proxy = parseVlessUri(singleLine);
-                const xhttpEl = document.getElementById('xhttpToggle');
-                if (proxy.network === 'xhttp' && xhttpEl && !xhttpEl.checked) {
-                    showError('Ссылка xhttp проигнорирована (отключено в настройках)');
-                    return;
-                }
                 config = generateVlessConfig(proxy);
             } else if (singleLine.startsWith('vmess://')) {
                 const proxy = parseVmessUri(singleLine);
@@ -709,10 +704,6 @@ function convert() {
         try {
             if (trimmedLine.startsWith('vless://')) {
                 const proxy = parseVlessUri(trimmedLine);
-                const xhttpEl = document.getElementById('xhttpToggle');
-                if (proxy.network === 'xhttp' && xhttpEl && !xhttpEl.checked) {
-                    continue; // xhttp отключён — пропускаем
-                }
                 proxies.push(proxy);
             } else if (trimmedLine.startsWith('vmess://')) {
                 const proxy = parseVmessUri(trimmedLine);
@@ -872,67 +863,31 @@ function parseHysteria2Uri(line) {
     return proxy;
 }
 
-function parseRangeConfig(v) {
-    if (typeof v === 'number') {
-        const n = Math.trunc(v);
-        return { from: n, to: n };
-    }
-    if (typeof v === 'string') {
-        const parts = v.split('-');
-        if (parts.length === 2) {
-            const from = parseInt(parts[0], 10);
-            const to = parseInt(parts[1], 10);
-            if (!isNaN(from) && !isNaN(to)) return { from, to };
-        }
-        const n = parseInt(v, 10);
-        if (!isNaN(n)) return { from: n, to: n };
-    }
-    return null;
-}
-
-function parseSplitHTTPExtra(extra, opts) {
+function parseXHTTPExtra(extra, opts) {
     if (extra.noGRPCHeader === true) opts['no-grpc-header'] = true;
-    if (extra.noSSEHeader === true) opts['no-sse-header'] = true;
-    if (extra.xPaddingBytes != null) {
-        const rc = parseRangeConfig(extra.xPaddingBytes);
-        if (rc) opts['x-padding-bytes'] = rc;
-    }
-    if (extra.xPaddingObfsMode === true) opts['x-padding-obfs-mode'] = true;
-    if (typeof extra.uplinkHTTPMethod === 'string' && extra.uplinkHTTPMethod)
-        opts['uplink-http-method'] = extra.uplinkHTTPMethod;
-    if (extra.scMaxEachPostBytes != null) {
-        const rc = parseRangeConfig(extra.scMaxEachPostBytes);
-        if (rc) opts['max-each-post-bytes'] = rc;
-    }
-    if (extra.scMinPostsIntervalMs != null) {
-        const rc = parseRangeConfig(extra.scMinPostsIntervalMs);
-        if (rc) opts['min-posts-interval'] = rc;
-    }
-    if (typeof extra.scMaxBufferedPosts === 'number' && extra.scMaxBufferedPosts !== 0)
-        opts['max-buffered-posts'] = Math.trunc(extra.scMaxBufferedPosts);
-    if (extra.scStreamUpServerSecs != null) {
-        const rc = parseRangeConfig(extra.scStreamUpServerSecs);
-        if (rc) opts['stream-up-server-secs'] = rc;
-    }
-    if (extra.xmux && typeof extra.xmux === 'object') {
-        const xmux = extra.xmux;
-        const xmuxOpts = {};
-        const xmuxFields = [
-            ['maxConcurrency', 'max-concurrency'],
-            ['maxConnections', 'max-connections'],
-            ['cMaxReuseTimes', 'c-max-reuse-times'],
-            ['hMaxRequestTimes', 'h-max-request-times'],
-            ['hMaxReusableSecs', 'h-max-reusable-secs'],
-        ];
-        for (const [src, dst] of xmuxFields) {
-            if (xmux[src] != null) {
-                const rc = parseRangeConfig(xmux[src]);
-                if (rc) xmuxOpts[dst] = rc;
-            }
+    if (typeof extra.xPaddingBytes === 'string' && extra.xPaddingBytes)
+        opts['x-padding-bytes'] = extra.xPaddingBytes;
+    if (extra.downloadSettings && typeof extra.downloadSettings === 'object') {
+        const ds = extra.downloadSettings;
+        const dsOpts = {};
+        if (typeof ds.address === 'string' && ds.address) dsOpts['server'] = ds.address;
+        if (typeof ds.port === 'number') dsOpts['port'] = Math.trunc(ds.port);
+        if (typeof ds.security === 'string' && ds.security.toLowerCase() === 'tls') dsOpts['tls'] = true;
+        if (ds.tlsSettings && typeof ds.tlsSettings === 'object') {
+            const tls = ds.tlsSettings;
+            if (typeof tls.serverName === 'string' && tls.serverName) dsOpts['servername'] = tls.serverName;
+            if (typeof tls.fingerprint === 'string' && tls.fingerprint) dsOpts['client-fingerprint'] = tls.fingerprint;
+            if (Array.isArray(tls.alpn) && tls.alpn.length > 0)
+                dsOpts['alpn'] = tls.alpn.filter(a => typeof a === 'string');
         }
-        if (typeof xmux.hKeepAlivePeriod === 'number')
-            xmuxOpts['h-keep-alive-period'] = Math.trunc(xmux.hKeepAlivePeriod);
-        if (Object.keys(xmuxOpts).length > 0) opts['xmux'] = xmuxOpts;
+        if (ds.xhttpSettings && typeof ds.xhttpSettings === 'object') {
+            const xh = ds.xhttpSettings;
+            if (typeof xh.path === 'string' && xh.path) dsOpts['path'] = xh.path;
+            if (typeof xh.host === 'string' && xh.host) dsOpts['host'] = xh.host;
+            if (xh.noGRPCHeader === true) dsOpts['no-grpc-header'] = true;
+            if (typeof xh.xPaddingBytes === 'string' && xh.xPaddingBytes) dsOpts['x-padding-bytes'] = xh.xPaddingBytes;
+        }
+        if (Object.keys(dsOpts).length > 0) opts['download-settings'] = dsOpts;
     }
 }
 
@@ -1091,18 +1046,18 @@ function parseVlessUri(line) {
         case 'xhttp':
         case 'splithttp': {
             proxy.network = 'xhttp';
-            proxy['splithttp-opts'] = {};
+            proxy['xhttp-opts'] = {};
             const path = params.get('path');
-            if (path) proxy['splithttp-opts'].path = path;
+            if (path) proxy['xhttp-opts'].path = path;
             const host = params.get('host');
-            if (host) proxy['splithttp-opts'].host = host;
+            if (host) proxy['xhttp-opts'].host = host;
             const mode = params.get('mode');
-            if (mode) proxy['splithttp-opts'].mode = mode;
+            if (mode) proxy['xhttp-opts'].mode = mode;
             const extraRaw = params.get('extra');
             if (extraRaw) {
                 try {
                     const extraMap = JSON.parse(extraRaw);
-                    parseSplitHTTPExtra(extraMap, proxy['splithttp-opts']);
+                    parseXHTTPExtra(extraMap, proxy['xhttp-opts']);
                 } catch (_) {}
             }
             break;
@@ -1746,37 +1701,31 @@ function generateVlessConfig(proxy) {
     grpc-service-name: '${proxy['grpc-opts']['grpc-service-name']}'`;
   }
 
-  // xhttp/splithttp-opts
-  if (proxy.network === 'xhttp' && proxy['splithttp-opts']) {
-    const so = proxy['splithttp-opts'];
-    config += `
-  splithttp-opts:`;
-    if (so.path)  config += `\n    path: '${so.path}'`;
-    if (so.host)  config += `\n    host: '${so.host}'`;
-    if (so.mode)  config += `\n    mode: '${so.mode}'`;
-    if (so['no-grpc-header'])    config += `\n    no-grpc-header: true`;
-    if (so['no-sse-header'])     config += `\n    no-sse-header: true`;
-    if (so['x-padding-obfs-mode']) config += `\n    x-padding-obfs-mode: true`;
-    if (so['uplink-http-method']) config += `\n    uplink-http-method: '${so['uplink-http-method']}'`;
-    if (so['max-buffered-posts'] != null) config += `\n    max-buffered-posts: ${so['max-buffered-posts']}`;
-    const rangeFields = [
-      'x-padding-bytes', 'max-each-post-bytes', 'min-posts-interval',
-      'stream-up-server-secs',
-    ];
-    for (const f of rangeFields) {
-      if (so[f]) config += `\n    ${f}:\n      from: ${so[f].from}\n      to: ${so[f].to}`;
-    }
-    if (so.xmux && typeof so.xmux === 'object') {
-      config += `\n    xmux:`;
-      const xmuxRangeFields = [
-        'max-concurrency', 'max-connections', 'c-max-reuse-times',
-        'h-max-request-times', 'h-max-reusable-secs',
-      ];
-      for (const f of xmuxRangeFields) {
-        if (so.xmux[f]) config += `\n      ${f}:\n        from: ${so.xmux[f].from}\n        to: ${so.xmux[f].to}`;
+  // xhttp-opts
+  if (proxy.network === 'xhttp' && proxy['xhttp-opts']) {
+    const xo = proxy['xhttp-opts'];
+    config += `\n  xhttp-opts:`;
+    if (xo.path)              config += `\n    path: '${xo.path}'`;
+    if (xo.host)              config += `\n    host: '${xo.host}'`;
+    if (xo.mode)              config += `\n    mode: '${xo.mode}'`;
+    if (xo['no-grpc-header']) config += `\n    no-grpc-header: true`;
+    if (xo['x-padding-bytes']) config += `\n    x-padding-bytes: '${xo['x-padding-bytes']}'`;
+    if (xo['download-settings'] && typeof xo['download-settings'] === 'object') {
+      const ds = xo['download-settings'];
+      config += `\n    download-settings:`;
+      if (ds.server)              config += `\n      server: '${ds.server}'`;
+      if (ds.port != null)        config += `\n      port: ${ds.port}`;
+      if (ds.tls)                 config += `\n      tls: true`;
+      if (ds.servername)          config += `\n      servername: '${ds.servername}'`;
+      if (ds['client-fingerprint']) config += `\n      client-fingerprint: '${ds['client-fingerprint']}'`;
+      if (Array.isArray(ds.alpn) && ds.alpn.length > 0) {
+        config += `\n      alpn:`;
+        for (const a of ds.alpn) config += `\n        - ${a}`;
       }
-      if (so.xmux['h-keep-alive-period'] != null)
-        config += `\n      h-keep-alive-period: ${so.xmux['h-keep-alive-period']}`;
+      if (ds.path)              config += `\n      path: '${ds.path}'`;
+      if (ds.host)              config += `\n      host: '${ds.host}'`;
+      if (ds['no-grpc-header']) config += `\n      no-grpc-header: true`;
+      if (ds['x-padding-bytes']) config += `\n      x-padding-bytes: '${ds['x-padding-bytes']}'`;
     }
   }
 
