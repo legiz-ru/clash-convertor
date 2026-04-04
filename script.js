@@ -1853,3 +1853,45 @@ function generateMultiProxyConfig(proxies) {
     ${proxyNames.map(name => `- "${name}"`).join('\n    ')}`;
 
     return config;
+}
+
+function setupDownloadAndCopy() {
+    const downloadBtn = document.getElementById('downloadBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    
+    downloadBtn.classList.remove('hidden');
+    downloadBtn.onclick = downloadConfig;
+    copyBtn.onclick = copyToClipboard;
+}
+
+function downloadConfig() {
+    const config = document.getElementById('yamlOutput').value;
+    const blob = new Blob([config], { type: 'text/yaml; charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'clash-config.yaml';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function copyToClipboard() {
+    const text = document.getElementById('yamlOutput').value;
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    
+    // Визуальная обратная связь
+    const copyBtn = document.getElementById('copyBtn');
+    const originalText = copyBtn.textContent;
+    copyBtn.textContent = 'Скопировано!';
+    setTimeout(() => {
+        copyBtn.textContent = originalText;
+    }, 2000);
+}
+document.querySelector('button[onclick="convert()"]').addEventListener('click', convert);
