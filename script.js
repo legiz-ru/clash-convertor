@@ -864,9 +864,35 @@ function parseHysteria2Uri(line) {
 }
 
 function parseXHTTPExtra(extra, opts) {
+    // xmuxToReuse converts xmux fields to mihomo reuse-settings.
+    // Values may be string or number (xray-core JSON allows both).
+    const xmuxToReuse = (xmux) => {
+        const reuse = {};
+        const fields = [
+            ['maxConnections',  'max-connections'],
+            ['maxConcurrency',  'max-concurrency'],
+            ['cMaxReuseTimes',  'c-max-reuse-times'],
+            ['hMaxRequestTimes','h-max-request-times'],
+            ['hMaxReusableSecs','h-max-reusable-secs'],
+        ];
+        for (const [src, dst] of fields) {
+            const v = xmux[src];
+            if (typeof v === 'string' && v) reuse[dst] = v;
+            else if (typeof v === 'number') reuse[dst] = String(Math.trunc(v));
+        }
+        return reuse;
+    };
+
     if (extra.noGRPCHeader === true) opts['no-grpc-header'] = true;
     if (typeof extra.xPaddingBytes === 'string' && extra.xPaddingBytes)
         opts['x-padding-bytes'] = extra.xPaddingBytes;
+
+    // xmux at root extra → reuse-settings
+    if (extra.xmux && typeof extra.xmux === 'object') {
+        const reuse = xmuxToReuse(extra.xmux);
+        if (Object.keys(reuse).length > 0) opts['reuse-settings'] = reuse;
+    }
+
     if (extra.downloadSettings && typeof extra.downloadSettings === 'object') {
         const ds = extra.downloadSettings;
         const dsOpts = {};
@@ -886,6 +912,12 @@ function parseXHTTPExtra(extra, opts) {
             if (typeof xh.host === 'string' && xh.host) dsOpts['host'] = xh.host;
             if (xh.noGRPCHeader === true) dsOpts['no-grpc-header'] = true;
             if (typeof xh.xPaddingBytes === 'string' && xh.xPaddingBytes) dsOpts['x-padding-bytes'] = xh.xPaddingBytes;
+            // xmux inside downloadSettings.xhttpSettings.extra → download-settings.reuse-settings
+            if (xh.extra && typeof xh.extra === 'object' &&
+                xh.extra.xmux && typeof xh.extra.xmux === 'object') {
+                const reuse = xmuxToReuse(xh.extra.xmux);
+                if (Object.keys(reuse).length > 0) dsOpts['reuse-settings'] = reuse;
+            }
         }
         if (Object.keys(dsOpts).length > 0) opts['download-settings'] = dsOpts;
     }
@@ -1705,27 +1737,37 @@ function generateVlessConfig(proxy) {
   if (proxy.network === 'xhttp' && proxy['xhttp-opts']) {
     const xo = proxy['xhttp-opts'];
     config += `\n  xhttp-opts:`;
-    if (xo.path)              config += `\n    path: '${xo.path}'`;
-    if (xo.host)              config += `\n    host: '${xo.host}'`;
-    if (xo.mode)              config += `\n    mode: '${xo.mode}'`;
-    if (xo['no-grpc-header']) config += `\n    no-grpc-header: true`;
+    if (xo.path)               config += `\n    path: '${xo.path}'`;
+    if (xo.host)               config += `\n    host: '${xo.host}'`;
+    if (xo.mode)               config += `\n    mode: '${xo.mode}'`;
+    if (xo['no-grpc-header'])  config += `\n    no-grpc-header: true`;
     if (xo['x-padding-bytes']) config += `\n    x-padding-bytes: '${xo['x-padding-bytes']}'`;
+    if (xo['reuse-settings'] && typeof xo['reuse-settings'] === 'object') {
+      config += `\n    reuse-settings:`;
+      for (const [k, v] of Object.entries(xo['reuse-settings']))
+        config += `\n      ${k}: ${v}`;
+    }
     if (xo['download-settings'] && typeof xo['download-settings'] === 'object') {
       const ds = xo['download-settings'];
       config += `\n    download-settings:`;
-      if (ds.server)              config += `\n      server: '${ds.server}'`;
-      if (ds.port != null)        config += `\n      port: ${ds.port}`;
-      if (ds.tls)                 config += `\n      tls: true`;
-      if (ds.servername)          config += `\n      servername: '${ds.servername}'`;
+      if (ds.server)                config += `\n      server: '${ds.server}'`;
+      if (ds.port != null)          config += `\n      port: ${ds.port}`;
+      if (ds.tls)                   config += `\n      tls: true`;
+      if (ds.servername)            config += `\n      servername: '${ds.servername}'`;
       if (ds['client-fingerprint']) config += `\n      client-fingerprint: '${ds['client-fingerprint']}'`;
       if (Array.isArray(ds.alpn) && ds.alpn.length > 0) {
         config += `\n      alpn:`;
         for (const a of ds.alpn) config += `\n        - ${a}`;
       }
-      if (ds.path)              config += `\n      path: '${ds.path}'`;
-      if (ds.host)              config += `\n      host: '${ds.host}'`;
-      if (ds['no-grpc-header']) config += `\n      no-grpc-header: true`;
+      if (ds.path)               config += `\n      path: '${ds.path}'`;
+      if (ds.host)               config += `\n      host: '${ds.host}'`;
+      if (ds['no-grpc-header'])  config += `\n      no-grpc-header: true`;
       if (ds['x-padding-bytes']) config += `\n      x-padding-bytes: '${ds['x-padding-bytes']}'`;
+      if (ds['reuse-settings'] && typeof ds['reuse-settings'] === 'object') {
+        config += `\n      reuse-settings:`;
+        for (const [k, v] of Object.entries(ds['reuse-settings']))
+          config += `\n        ${k}: ${v}`;
+      }
     }
   }
 
@@ -1811,45 +1853,3 @@ function generateMultiProxyConfig(proxies) {
     ${proxyNames.map(name => `- "${name}"`).join('\n    ')}`;
 
     return config;
-}
-
-function setupDownloadAndCopy() {
-    const downloadBtn = document.getElementById('downloadBtn');
-    const copyBtn = document.getElementById('copyBtn');
-    
-    downloadBtn.classList.remove('hidden');
-    downloadBtn.onclick = downloadConfig;
-    copyBtn.onclick = copyToClipboard;
-}
-
-function downloadConfig() {
-    const config = document.getElementById('yamlOutput').value;
-    const blob = new Blob([config], { type: 'text/yaml; charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'clash-config.yaml';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-function copyToClipboard() {
-    const text = document.getElementById('yamlOutput').value;
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    document.body.appendChild(textarea);
-    textarea.select();
-    document.execCommand('copy');
-    document.body.removeChild(textarea);
-    
-    // Визуальная обратная связь
-    const copyBtn = document.getElementById('copyBtn');
-    const originalText = copyBtn.textContent;
-    copyBtn.textContent = 'Скопировано!';
-    setTimeout(() => {
-        copyBtn.textContent = originalText;
-    }, 2000);
-}
-document.querySelector('button[onclick="convert()"]').addEventListener('click', convert);
